@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journal de Travail</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        select {
+            margin-bottom: 10px;
+            padding: 8px;
+            width: calc(100% - 16px);
+            height: 50px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <h1>Journal de Travail</h1>
+    <div>
+        <label>Auteurs:</label>
+        <select multiple v-model="selectedAuthors">
+            <option v-for="author in uniqueAuthors" :key="author" :value="author">{{ author }}</option>
+        </select>
+    </div>
+
+    <div>
+        <label>Projets:</label>
+        <select multiple v-model="selectedProjects">
+            <option v-for="project in uniqueProjects" :key="project" :value="project">{{ project }}</option>
+        </select>
+    </div>
+
+    <button @click="fetchCommits">Charger les Commits</button>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Auteur</th>
+                <th>Description</th>
+                <th>Durée</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr v-for="commit in filteredCommits" :key="commit.sha">
+                <td>{{ commit.commit.author.name }}</td>
+                <td>{{ commit.commit.message }}</td>
+                <td>{{ calculateDuration(commit.commit.message) }}</td>
+                <td>{{ getStatus(commit.commit.message) }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+<script>
+    new Vue({
+        el: '#app',
+        data() {
+            return {
+                commits: [],
+                uniqueAuthors: [],
+                uniqueProjects: [],
+                selectedAuthors: [],
+                selectedProjects: []
+            };
+        },
+        computed: {
+            filteredCommits() {
+                return this.commits.filter(commit => {
+                    const authorMatches = this.selectedAuthors.length ? 
+                        this.selectedAuthors.includes(commit.commit.author.name) : true;
+                    const projectMatches = this.selectedProjects.length ? 
+                        this.selectedProjects.some(project => commit.commit.message.includes(project)) : true;
+                    return authorMatches && projectMatches;
+                });
+            }
+        },
+        methods: {
+            fetchCommits() {
+                const repo = 'ASETML/cicd-todo-app'; // Replace with your GitHub username/repo
+                const token = 'YOUR_PERSONAL_ACCESS_TOKEN'; // Replace with your PAT
+                const url = `https://api.github.com/repos/${repo}/commits`;
+
+                fetch(url, {
+                    headers: {
+                        'Authorization': `token ${token}`
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(data => {
+                    this.commits = data;
+                    this.extractUniqueAuthorsAndProjects(data);
+                })
+                .catch(error => console.error('Error fetching commits:', error));
+            },
+            extractUniqueAuthorsAndProjects(data) {
+                const authors = new Set();
+                const projects = new Set();
+                
+                data.forEach(commit => {
+                    authors.add(commit.commit.author.name);
+                    const projectMatch = commit.commit.message.match(/{(.*?)}/);
+                    if (projectMatch && projectMatch[1]) {
+                        projects.add(projectMatch[1]);
+                    }
+                });
+
+                this.uniqueAuthors = Array.from(authors);
+                this.uniqueProjects = Array.from(projects);
+            },
+            calculateDuration(message) {
+                const durationMatch = message.match(/$$(\d+)$$/);
+                return durationMatch ? `${durationMatch[1]} min` : 'Non spécifié';
+            },
+            getStatus(message) {
+                const statusMatch = message.match(/$$(done|wip)$$/i);
+                return statusMatch ? statusMatch[1].charAt(0).to
+                return statusMatch ? statusMatch[1].charAt(0).toUpperCase() + statusMatch[1].slice(1) : 'Inconnu';
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
