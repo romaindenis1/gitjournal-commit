@@ -1,12 +1,4 @@
-# Alias for bashrc
 default_alias = ""
-
-# Allow empty commits
-# true or false
 allow_empty =    
-
-# default project name
 default_project = ""
-
-#Todo
 default_status

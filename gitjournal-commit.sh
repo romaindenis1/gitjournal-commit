@@ -6,7 +6,11 @@ echo "Dont forget to git add"
 
 # --- Load config ---
 
-CONFIG_FILE="$(dirname "$0")/config.yml"
+# Determine script directory in a way that works when it is sourced. 
+# `${BASH_SOURCE[0]}` points to the path of this
+# script file in both cases (unlike `$0`).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/config.yml"
 if [[ -f "$CONFIG_FILE" ]]; then
 
     # finds the alias line, keep first match, 
@@ -18,18 +22,26 @@ if [[ -f "$CONFIG_FILE" ]]; then
     # parse default_project
     default_project=$(grep -E '^[[:space:]]*default_project[[:space:]]*[:=]' "$CONFIG_FILE" 2>/dev/null | head -n1 | cut -d'=' -f2- | cut -d':' -f2- | tr -d '"' | tr -d "'" | xargs)
 
-    if [[ -n "$alias_name" ]]; then
-        script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-        alias_cmd="alias $alias_name='bash \"$script_path\"'"
-        eval "$alias_cmd"
-        echo "Created alias in this shell: $alias_name -> $script_path"
+    # parse default_status
+    default_status=$(grep -E '^[[:space:]]*default_status[[:space:]]*[:=]' "$CONFIG_FILE" 2>/dev/null | head -n1 | cut -d'=' -f2- | cut -d':' -f2- | tr -d '"' | tr -d "'" | xargs)
 
-        # TODO: check if alias existsm right now it just appends
-        if [[ ! -e "$HOME/.bashrc" ]]; then
-            touch "$HOME/.bashrc" 2>/dev/null || true
+    if [[ -n "$alias_name" ]]; then
+        script_path="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
+        alias_cmd="alias $alias_name='bash \"$script_path\"'"
+        if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then eval "$alias_cmd"; echo "Created alias in this shell: $alias_name -> $script_path"; fi
+        # ensure ~/.bashrc exists
+        BASHRC="$HOME/.bashrc"
+        if [[ ! -e "$BASHRC" ]]; then
+            touch "$BASHRC" 2>/dev/null || true
         fi
-        printf "\n# gitjournal-commit alias\n%s\n" "$alias_cmd" >> "$HOME/.bashrc" 2>/dev/null || true
-        echo "Alias appended to ~/.bashrc (no duplicate checks performed)."
+
+        # avoid appending duplicate alias lines
+        if grep -Eq "^[[:space:]]*alias[[:space:]]+$alias_name=" "$BASHRC" 2>/dev/null || grep -Fq "$script_path" "$BASHRC" 2>/dev/null; then
+            echo "Alias '$alias_name' already present in $BASHRC; not appending."
+        else
+            printf "\n# gitjournal-commit alias\n%s\n" "$alias_cmd" >> "$BASHRC" 2>/dev/null || true
+            echo "Alias appended to $BASHRC"
+        fi
     fi
 fi
 
@@ -65,8 +77,25 @@ fi
 echo "Final duration: $duration"
 
 # --- Status ---
-read -ep "Commit status: " status
-command+=" -m \"[$duration] [$status]\""
+if [[ -n "$default_status" ]]; then
+    read -ep "Commit status? [Enter = use default '$default_status', y = different, N = skip]: " status_choice
+    if [[ -z "$status_choice" ]]; then
+        status="$default_status"
+    elif [[ "$status_choice" =~ ^[nN]$ ]]; then
+        status=""
+    elif [[ "$status_choice" =~ ^[yY]$ ]]; then
+        read -ep "Commit status: " status
+        status=${status:-$default_status}
+    else
+        status="$status_choice"
+    fi
+else
+    read -ep "Commit status: " status
+fi
+
+if [[ -n "$status" ]]; then
+    command+=" -m \"[$duration] [$status]\""
+fi
 
 # --- Project ---
 if [[ -n "$default_project" ]]; then
@@ -123,3 +152,4 @@ echo ""
 echo "If mistake:"
 echo "  git reset --soft HEAD~1 to delete last commit"
 echo "  git commit --rebase to modify last commit"
+
